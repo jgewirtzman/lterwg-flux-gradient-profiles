@@ -136,7 +136,7 @@ calc_integrated_storage <- function(storage_flux, attr_df,
 #' Aggregates 9-min dC/dt (from calc_storage_flux_level) to 30-min windows,
 #' then integrates over each inter-sensor layer using rho_mol and Δz.
 #' Returns storage_flux in the same units as F_FG from compute_layer_fluxes()
-#' (µmol/m²/s for CO2; nmol/m²/s for CH4 — matching concentration units).
+#' (µmol/m²/s for all gases — NEON reports CO2, CH4, and H2O in ppm/µmol/mol).
 #'
 #' @param profile_ts Tibble. Output of prepare_profile_timeseries()
 #' @param attr_df Data frame. Site attributes

@@ -90,51 +90,80 @@ plot_flux_vertical_profile <- function(layer_fluxes_all, canopy_metrics,
 }
 
 
-#' Layer source/sink strength (difference between adjacent pair fluxes)
+#' Layer source/sink strength per layer, with optional storage correction.
+#'
+#' @param layer_fluxes_all Named list (by site) of layer flux tibbles from
+#'   compute_layer_fluxes(); used as fallback when source_sink_all is NULL.
+#' @param source_sink_all Optional named list (by site) of tibbles from
+#'   compute_source_sink_layer(). When provided, uses S_net (= dF + storage)
+#'   as the primary source/sink estimate. A secondary marker shows dF alone
+#'   so the storage contribution is visible.
 plot_layer_source_sink <- function(layer_fluxes_all, canopy_metrics,
                                      gas = "CH4",
-                                     condition = "JJA_Night") {
+                                     condition = "JJA_Night",
+                                     source_sink_all = NULL) {
 
+  use_storage <- !is.null(source_sink_all)
   rows <- list()
-  for (site in names(layer_fluxes_all)) {
-    lf <- layer_fluxes_all[[site]]
-    if (is.null(lf) || nrow(lf) == 0) next
+  site_pool <- if (use_storage) names(source_sink_all) else names(layer_fluxes_all)
 
-    lf <- lf %>%
-      rename(timeMid = time_round) %>%
-      add_season("timeMid") %>%
-      add_tod("timeMid")
+  for (site in site_pool) {
+    if (use_storage) {
+      ss <- source_sink_all[[site]]
+      if (is.null(ss) || nrow(ss) == 0) next
+      ss <- ss %>%
+        rename(timeMid = time_round) %>%
+        add_season("timeMid") %>%
+        add_tod("timeMid")
+      if (!is.null(condition) && condition == "JJA_Night") {
+        ss <- ss %>% filter(season == "JJA", tod == "Night")
+      }
+      if (nrow(ss) == 0) next
 
-    if (!is.null(condition) && condition == "JJA_Night") {
-      lf <- lf %>% filter(season == "JJA", tod == "Night")
+      layers <- ss %>%
+        group_by(layer_label, z_lower, z_upper) %>%
+        summarise(
+          source_sink     = mean(S_net, na.rm = TRUE),
+          source_sink_dF  = mean(S_net_nostorage, na.rm = TRUE),
+          has_storage     = any(!is.na(storage_flux) & storage_flux != 0),
+          .groups = "drop"
+        ) %>%
+        mutate(z_mid_layer = (z_lower + z_upper) / 2, site = site)
+    } else {
+      lf <- layer_fluxes_all[[site]]
+      if (is.null(lf) || nrow(lf) == 0) next
+      lf <- lf %>%
+        rename(timeMid = time_round) %>%
+        add_season("timeMid") %>%
+        add_tod("timeMid")
+      if (!is.null(condition) && condition == "JJA_Night") {
+        lf <- lf %>% filter(season == "JJA", tod == "Night")
+      }
+      if (nrow(lf) == 0) next
+
+      level_summary <- lf %>%
+        group_by(pair_label, z) %>%
+        summarise(F_mean = mean(F_FG, na.rm = TRUE), .groups = "drop") %>%
+        arrange(z)
+      if (nrow(level_summary) < 2) next
+
+      z_lev <- level_summary$z
+      F_lev <- level_summary$F_mean
+      layers <- tibble(
+        z_lower      = z_lev[-length(z_lev)],
+        z_upper      = z_lev[-1],
+        z_mid_layer  = (z_lev[-length(z_lev)] + z_lev[-1]) / 2,
+        source_sink  = diff(F_lev),
+        source_sink_dF = diff(F_lev),
+        has_storage  = FALSE,
+        layer_label  = paste0(round(z_lev[-length(z_lev)], 1), "\u2013",
+                               round(z_lev[-1], 1), " m"),
+        site = site
+      )
     }
-    if (nrow(lf) == 0) next
-
-    # Summarize per sensor (flux labeled at the lower sensor of each pair)
-    level_summary <- lf %>%
-      group_by(pair_label, z) %>%
-      summarise(F_mean = mean(F_FG, na.rm = TRUE), .groups = "drop") %>%
-      arrange(z)
-
-    if (nrow(level_summary) < 2) next
-
-    # Source/sink in each layer between adjacent sensors:
-    #   S(layer between sensor i and sensor i+1) = F(z_{i+1}) − F(z_i)
-    # No ground boundary is imposed — F at the lowest sensor IS our estimate
-    # of the flux at that height (and, by proxy, the near-surface / soil flux).
-    z_lev  <- level_summary$z
-    F_lev  <- level_summary$F_mean
-
-    layers <- tibble(
-      z_lower_layer = z_lev[-length(z_lev)],
-      z_upper_layer = z_lev[-1],
-      z_mid_layer   = (z_lev[-length(z_lev)] + z_lev[-1]) / 2,
-      source_sink   = diff(F_lev),
-      site = site
-    )
-
     rows[[site]] <- layers
   }
+
   df <- bind_rows(rows)
   if (nrow(df) == 0) return(ggplot() + theme_void() + labs(title = "No data"))
 
@@ -145,18 +174,34 @@ plot_layer_source_sink <- function(layer_fluxes_all, canopy_metrics,
   site_order <- canopy_metrics %>% arrange(canopy_height) %>% pull(site)
   df$site <- factor(df$site, levels = intersect(site_order, unique(df$site)))
 
-  units <- flux_units_for_gas(gas)
   scale <- flux_scale_for_gas(gas)
-  df    <- df %>% mutate(source_sink = source_sink * scale)
+  units <- flux_units_for_gas(gas)
+  df <- df %>%
+    mutate(source_sink    = source_sink    * scale,
+           source_sink_dF = source_sink_dF * scale) %>%
+    arrange(site, z_mid_layer)
 
-  df <- df %>% arrange(site, z_mid_layer)
+  subtitle_txt <- if (use_storage)
+    "Thick bar = S_net (dF + storage). Hollow circle = dF alone (no storage)."
+  else
+    "Positive = net source in that layer. Negative = net sink. (storage not included)"
 
-  ggplot(df, aes(x = source_sink, y = z_mid_layer, color = canopy_class, group = site)) +
+  p <- ggplot(df, aes(y = z_mid_layer, color = canopy_class, group = site)) +
     geom_vline(xintercept = 0, color = "grey60", linewidth = 0.3) +
+    # Primary bar: S_net (storage-corrected when source_sink_all provided)
     geom_segment(aes(x = 0, xend = source_sink,
                      y = z_mid_layer, yend = z_mid_layer),
-                 linewidth = 1.5, alpha = 0.7) +
-    geom_point(size = 2) +
+                 linewidth = 1.5, alpha = 0.75) +
+    geom_point(aes(x = source_sink), size = 2)
+
+  # When using storage: overlay hollow circle at dF-only position
+  if (use_storage) {
+    p <- p +
+      geom_point(aes(x = source_sink_dF), size = 2.5, shape = 1,
+                 color = "grey40", alpha = 0.7)
+  }
+
+  p +
     geom_hline(data = df %>% distinct(site, canopy_height),
                aes(yintercept = canopy_height),
                linetype = "dashed", color = "forestgreen", linewidth = 0.4) +
@@ -172,11 +217,11 @@ plot_layer_source_sink <- function(layer_fluxes_all, canopy_metrics,
       x = paste0("Layer source/sink (", units, ")"),
       y = "Layer midpoint height (m)",
       title = paste0(gas, " Layer Source/Sink Profile (", condition, ")"),
-      subtitle = "Positive = net source in that layer. Negative = net sink."
+      subtitle = subtitle_txt
     ) +
     theme_minimal(base_size = 9) +
     theme(
-      strip.text = element_text(face = "bold", size = 8),
-      panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.3)
+      strip.text    = element_text(face = "bold", size = 8),
+      panel.border  = element_rect(color = "grey80", fill = NA, linewidth = 0.3)
     )
 }

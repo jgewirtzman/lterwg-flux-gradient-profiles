@@ -485,8 +485,12 @@ if (length(sites_to_process) > 1) {
         ggsave(file.path(fig_dir, paste0("multi_site_", gas, "_flux_profile.png")),
                p, width = 18, height = 16, dpi = 140, limitsize = FALSE)
 
-        # Layer source/sink profile
-        p <- plot_layer_source_sink(gas_fluxes, canopy_metrics, gas)
+        # Layer source/sink profile — pass storage-corrected S_net when available
+        gas_ss <- lapply(all_source_sink, function(x) x[[gas]])
+        gas_ss <- gas_ss[!sapply(gas_ss, is.null)]
+        gas_ss <- gas_ss[sapply(gas_ss, function(s) !is.null(s) && nrow(s) > 0)]
+        p <- plot_layer_source_sink(gas_fluxes, canopy_metrics, gas,
+                                    source_sink_all = if (length(gas_ss) > 0) gas_ss else NULL)
         ggsave(file.path(fig_dir, paste0("multi_site_", gas, "_layer_source_sink.png")),
                p, width = 18, height = 16, dpi = 140, limitsize = FALSE)
 
@@ -640,7 +644,8 @@ for (site in sites_to_process) {
       p <- plot_method_workflow(site, gas,
                                   all_profiles, all_met, all_winds,
                                   all_fluxes, all_data,
-                                  filter_jja_night = TRUE, tod = tt)
+                                  filter_jja_night = TRUE, tod = tt,
+                                  source_sink_df = all_source_sink[[site]][[gas]])
       ggsave(file.path(mw_dir,
                        paste0("method_workflow_", site, "_", gas, ".png")),
              p, width = 20, height = 11, dpi = 150)

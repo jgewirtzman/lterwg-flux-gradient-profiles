@@ -61,7 +61,8 @@ plot_method_workflow <- function(site, gas,
                                    all_profiles, all_met, all_winds,
                                    all_fluxes, all_data,
                                    filter_jja_night = TRUE,
-                                   tod = c("Night", "Day")) {
+                                   tod = c("Night", "Day"),
+                                   source_sink_df = NULL) {
   tod <- match.arg(tod)
 
   requireNamespace("patchwork", quietly = TRUE)
@@ -347,49 +348,82 @@ plot_method_workflow <- function(site, gas,
   # PANEL 7 — Lagrangian flux decomposition (horizontal, bottom-up)
   # ===========================================================================
   # Each row is an INDEPENDENT contribution drawn as a vector from zero:
-  # soil flux (brown), then each canopy layer's source/sink (green, sign
-  # preserved). Together they sum to the ecosystem flux, which is drawn as
-  # a final aubergine row (= sum of all above). Dashed connector highlights
-  # the sum relationship.
+  # soil flux (brown), then each canopy layer's S_net (dF + storage, when
+  # source_sink_df is provided) or dF alone. Hollow tick marks show dF-only
+  # so the storage contribution is visible. The final aubergine row is the
+  # direct top-pair measurement (independent of the layer components).
   F_sorted <- F_stats %>% arrange(z)
   z_levels <- F_sorted$z
+  soil_val <- F_sorted$F_med[1]         # F at bottom pair
+  eco_val  <- F_sorted$F_med[nrow(F_sorted)]  # F at top pair
 
-  # Soil contribution: F at bottom sensor (proxy for soil flux)
-  soil_val <- F_sorted$F_med[1]
+  # Layer source/sink values — prefer S_net from source_sink_df when available
+  use_ss <- FALSE
+  if (!is.null(source_sink_df) && nrow(source_sink_df) > 0) {
+    ss_filt <- source_sink_df
+    if (filter_jja_night) {
+      ss_filt <- ss_filt %>%
+        mutate(.mon  = lubridate::month(time_round),
+               .hour = lubridate::hour(time_round)) %>%
+        filter(.mon %in% 6:8,
+               if (tod == "Night") (.hour < 6 | .hour >= 18) else (.hour >= 6 & .hour < 18))
+    }
+    if (nrow(ss_filt) > 0) {
+      ss_summary <- ss_filt %>%
+        group_by(layer_label, z_lower, z_upper) %>%
+        summarise(S_net  = mean(S_net,          na.rm = TRUE) * scale_gas,
+                  dF_val = mean(S_net_nostorage, na.rm = TRUE) * scale_gas,
+                  .groups = "drop") %>%
+        arrange(z_lower)
+      if (nrow(ss_summary) > 0) {
+        use_ss     <- TRUE
+        layer_zlo  <- ss_summary$z_lower
+        layer_zhi  <- ss_summary$z_upper
+        layer_vals <- ss_summary$S_net
+        layer_dF   <- ss_summary$dF_val
+        p7_subtitle <- "soil + layer S_net (dF + storage)  |  hollow tick = dF alone"
+      }
+    }
+  }
+  if (!use_ss) {
+    layer_vals <- diff(F_sorted$F_med)
+    layer_dF   <- layer_vals
+    layer_zlo  <- z_levels[-length(z_levels)]
+    layer_zhi  <- z_levels[-1]
+    p7_subtitle <- "soil + canopy layer \u0394F = ecosystem flux (by construction)"
+  }
 
-  # Layer contributions: each pair's ΔF
-  layer_vals <- diff(F_sorted$F_med)
-  layer_zlo  <- z_levels[-length(z_levels)]
-  layer_zhi  <- z_levels[-1]
-
-  eco_val <- F_sorted$F_med[nrow(F_sorted)]   # = soil + sum(layer dF)
-
-  # Component rows: soil + N-1 layer ΔFs  (there are N-1 pairs; N-2 layer ΔFs,
-  # plus one soil row  = N-1 total component rows).
   component_rows <- bind_rows(
-    tibble(step = 1L,
-           label = paste0("soil (", round(z_levels[1], 1), " m)"),
-           value = soil_val,
-           fill  = MW_PAL$ground,
-           is_sum = FALSE),
-    tibble(step = 2:(1 + length(layer_vals)),
-           label = sprintf("%.1f \u2013 %.1f m", layer_zlo, layer_zhi),
-           value = layer_vals,
-           fill  = MW_PAL$canopy_lt,
-           is_sum = FALSE)
+    tibble(step     = 1L,
+           label    = paste0("soil (", round(z_levels[1], 1), " m)"),
+           value    = soil_val,
+           value_dF = soil_val,
+           fill     = MW_PAL$ground,
+           is_sum   = FALSE),
+    if (length(layer_vals) > 0)
+      tibble(step     = seq(2L, length.out = length(layer_vals)),
+             label    = sprintf("%.1f \u2013 %.1f m", layer_zlo, layer_zhi),
+             value    = layer_vals,
+             value_dF = layer_dF,
+             fill     = MW_PAL$canopy_lt,
+             is_sum   = FALSE)
+    else
+      tibble()
   )
-  # Sum row (total = ecosystem flux, top-pair)
+  # When storage is included, sum of components ≠ top pair; label accordingly.
+  sum_label <- if (use_ss) "ecosystem\n(top pair)" else "\u03a3 = ecosystem\n(top pair)"
   sum_row <- tibble(
-    step  = nrow(component_rows) + 1L,
-    label = "\u03a3 = ecosystem\n(top pair)",
-    value = eco_val,
-    fill  = MW_PAL$flux_top,
-    is_sum = TRUE
+    step     = nrow(component_rows) + 1L,
+    label    = sum_label,
+    value    = eco_val,
+    value_dF = eco_val,
+    fill     = MW_PAL$flux_top,
+    is_sum   = TRUE
   )
   casc <- bind_rows(component_rows, sum_row) %>% mutate(ypos = seq_len(n()))
   y_divider <- nrow(component_rows) + 0.5
 
-  xr <- range(c(0, casc$value))
+  xr <- range(c(0, casc$value, casc$value_dF))
   xpad <- 0.08 * diff(xr)
   if (xpad == 0) xpad <- 0.1
 
@@ -397,11 +431,13 @@ plot_method_workflow <- function(site, gas,
     geom_vline(xintercept = 0, color = "grey55", linewidth = 0.3) +
     geom_hline(yintercept = y_divider, linetype = "dashed",
                color = "grey55", linewidth = 0.35) +
-    # vectors from zero (contribution magnitudes)
+    # primary arrows: S_net (or dF when no source_sink_df)
     geom_segment(aes(x = 0, xend = value, yend = ypos,
                      color = fill, linewidth = is_sum),
                  lineend = "butt",
                  arrow = arrow(length = unit(0.12, "inches"), type = "closed")) +
+    # hollow tick at dF-only position (visible when storage differs)
+    geom_point(aes(x = value_dF), shape = 124, size = 4, color = "grey40") +
     # signed value labels
     geom_text(aes(x = ifelse(value >= 0, value, 0) + xpad * 0.25,
                    label = sprintf("%+.3f", value),
@@ -418,7 +454,7 @@ plot_method_workflow <- function(site, gas,
                                     max(xr) + xpad * 1.4)) +
     labs(x = paste0("F contribution  (", units_gas, ")"), y = NULL,
          title = "7. Lagrangian flux decomposition",
-         subtitle = "soil + canopy layer source/sinks = ecosystem flux (by construction)") +
+         subtitle = p7_subtitle) +
     theme_mw() +
     theme(axis.text.y = element_blank(),
           axis.ticks.y = element_blank(),
