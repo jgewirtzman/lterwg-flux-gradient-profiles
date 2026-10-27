@@ -42,6 +42,22 @@ do_download <- FALSE
 # Footprint filter for arrow plots: "strict", "moderate", "relaxed", or NULL
 arrow_footprint_filter <- NULL  # show all data; change to "moderate" for filtered
 
+# Toggle pair-resolved footprint mechanism-2 test (NWI fetch + Kljun + regression).
+# Off by default because NWI fetching is network-bound and footprint computation
+# is the slowest step in the pipeline. Set TRUE to run; results are checkpointed
+# per site, so re-runs are incremental.
+do_footprint_mechanism <- if (exists("do_footprint_mechanism"))
+  do_footprint_mechanism else FALSE
+
+# Subsample timestamps per site for the footprint test (0 = all). Useful for
+# a fast first pass; set to 0 for the final manuscript run.
+footprint_sample_n <- if (exists("footprint_sample_n"))
+  footprint_sample_n else 2000
+
+# NWI buffer radius around each tower (m). 5000 m comfortably exceeds the
+# largest expected concentration footprint at NEON tower heights.
+nwi_buffer_m <- if (exists("nwi_buffer_m")) nwi_buffer_m else 5000
+
 # ============================================================================
 # STEP 1: DOWNLOAD DATA
 # ============================================================================
@@ -656,5 +672,141 @@ for (site in sites_to_process) {
 }
 message(sprintf("  Wrote %d method-workflow figures to %s",
                  length(list.files(mw_dir, pattern = "\\.png$")), mw_dir))
+
+# ============================================================================
+# STEP 7: PAIR-RESOLVED FOOTPRINT MECHANISM-2 TEST (optional)
+#
+# For each adjacent sensor pair at each 30-min timestamp, compute the Kljun
+# (2015) footprint at each measurement height, intersect with NWI wetland
+# polygons within a buffer of the tower, and form the pairwise differences
+# (ΔA, Δf_wet). Regress dC ~ Δf_wet + ΔA at three levels of aggregation:
+# per-site, per-canopy-class, and pooled continental (mixed model). This is
+# the headline mechanism-2 (hidden wet microsites in footprint) test for the
+# manuscript.
+# ============================================================================
+if (do_footprint_mechanism) {
+  message("=== STEP 7: pair-resolved footprint mechanism-2 test ===")
+  nwi_dir   <- file.path(proj_dir, "data", "nwi")
+  fp_dir    <- file.path(proj_dir, "output", "footprint")
+  fp_fig    <- file.path(fig_dir, "footprint")
+  dir.create(nwi_dir, showWarnings = FALSE, recursive = TRUE)
+  dir.create(fp_dir,  showWarnings = FALSE, recursive = TRUE)
+  dir.create(fp_fig,  showWarnings = FALSE, recursive = TRUE)
+
+  # ---- 7a. NWI inventory ----
+  nwi_inventory_path <- file.path(tab_dir, "nwi_inventory.csv")
+  message("  STEP 7a: NWI inventory (buffer = ", nwi_buffer_m, " m)")
+  nwi_inv <- inventory_nwi_all_sites(all_data, buffer_m = nwi_buffer_m,
+                                      out_dir = nwi_dir, overwrite = FALSE)
+  write.csv(nwi_inv, nwi_inventory_path, row.names = FALSE)
+  message("  Wrote ", nwi_inventory_path)
+
+  # ---- 7b. Per-site, per-timestamp footprint pair metrics (CH4 only) ----
+  # CH4 is the headline; CO2/H2O can be added by re-running with gas list
+  # expanded. Per-site checkpoint to make this incremental.
+  message("  STEP 7b: pair metrics (CH4)")
+  all_pair_metrics <- list()
+  for (site in sites_to_process) {
+    fp_ckpt <- file.path(fp_dir, paste0(site, "_pair_metrics_CH4.rds"))
+    if (file.exists(fp_ckpt)) {
+      all_pair_metrics[[site]] <- readRDS(fp_ckpt)
+      next
+    }
+    if (is.null(all_data[[site]]$aligned) ||
+        is.null(all_data[[site]]$aligned$CH4)) next
+    nwi_proj <- load_nwi_for_site(site, nwi_dir)
+    if (is.null(nwi_proj)) {
+      # No NWI for this site — still compute area/ΔA (set f_wet to 0)
+      nwi_proj <- st_sf(geometry = st_sfc(crs = pick_local_aea(
+        as.numeric(all_data[[site]]$attr$LonTow[1]),
+        as.numeric(all_data[[site]]$attr$LatTow[1]))))
+    }
+    pm <- tryCatch(
+      compute_footprint_pair_metrics(
+        aligned_gas = all_data[[site]]$aligned$CH4,
+        attr_df     = all_data[[site]]$attr,
+        nwi_proj    = nwi_proj,
+        wind_dir_col = NULL,            # add a column name when 30-min wind dir is wired in
+        sample_n    = footprint_sample_n,
+        r_pct       = 80
+      ),
+      error = function(e) {
+        message("  ", site, " footprint metrics failed: ", e$message)
+        NULL
+      }
+    )
+    if (!is.null(pm) && nrow(pm) > 0) {
+      pm$site <- site
+      saveRDS(pm, fp_ckpt)
+      all_pair_metrics[[site]] <- pm
+    }
+  }
+  pair_df <- bind_rows(all_pair_metrics)
+  if (nrow(pair_df) == 0) {
+    message("  No pair metrics computed — skipping STEP 7c-7d")
+  } else {
+    saveRDS(pair_df, file.path(fp_dir, "pair_metrics_all_sites_CH4.rds"))
+    write.csv(pair_df %>% select(-any_of("geometry")),
+              file.path(tab_dir, "pair_metrics_all_sites_CH4.csv"),
+              row.names = FALSE)
+
+    # ---- 7c. Regression ----
+    message("  STEP 7c: regressions")
+    pair_clean <- filter_pair_metrics(pair_df, adjacent_only = TRUE,
+                                       drop_na_dfwet = TRUE,
+                                       jja_night_only = FALSE)
+    per_site_fit <- fit_per_site_regression(pair_clean, gas = "CH4")
+    cont_fit     <- fit_continental_regression(pair_clean, gas = "CH4")
+    write.csv(per_site_fit,
+              file.path(tab_dir, "footprint_per_site_regression_CH4.csv"),
+              row.names = FALSE)
+    write.csv(cont_fit,
+              file.path(tab_dir, "footprint_continental_regression_CH4.csv"),
+              row.names = FALSE)
+
+    canopy_for_class <- if (exists("canopy_metrics")) canopy_metrics
+                         else compute_canopy_metrics_all(all_data)
+    classified <- classify_mechanism(per_site_fit, canopy_metrics = canopy_for_class)
+    write.csv(classified,
+              file.path(tab_dir, "footprint_mechanism_classification_CH4.csv"),
+              row.names = FALSE)
+
+    # ---- 7d. Plots ----
+    message("  STEP 7d: plots")
+    site_coords <- nwi_inv %>% select(site, lat, lon)
+
+    tryCatch({
+      p <- plot_dc_vs_dfwet(pair_clean, canopy_for_class, cont_fit, gas = "CH4")
+      ggsave(file.path(fp_fig, "footprint_dC_vs_dfwet_CH4.png"),
+             p, width = 10, height = 8, dpi = 150)
+    }, error = function(e) message("    dc_vs_dfwet: ", e$message))
+
+    tryCatch({
+      p <- plot_dc_vs_dArea(pair_clean, canopy_for_class, gas = "CH4")
+      ggsave(file.path(fp_fig, "footprint_dC_vs_dArea_CH4.png"),
+             p, width = 10, height = 8, dpi = 150)
+    }, error = function(e) message("    dc_vs_dArea: ", e$message))
+
+    tryCatch({
+      p <- plot_per_site_slopes(classified, canopy_for_class, gas = "CH4")
+      ggsave(file.path(fp_fig, "footprint_per_site_slopes_CH4.png"),
+             p, width = 8, height = 14, dpi = 150)
+    }, error = function(e) message("    per_site_slopes: ", e$message))
+
+    tryCatch({
+      p <- plot_mechanism_map(classified, site_coords, gas = "CH4")
+      ggsave(file.path(fp_fig, "footprint_mechanism_map_CH4.png"),
+             p, width = 14, height = 8, dpi = 150)
+    }, error = function(e) message("    mechanism_map: ", e$message))
+
+    tryCatch({
+      p <- plot_fwet_vs_height(pair_clean, canopy_for_class)
+      ggsave(file.path(fp_fig, "footprint_fwet_vs_height_CH4.png"),
+             p, width = 14, height = 10, dpi = 150)
+    }, error = function(e) message("    fwet_vs_height: ", e$message))
+
+    message("  Footprint plots written to ", fp_fig)
+  }
+}
 
 message("=== Done! Figures saved to: ", fig_dir, " ===")

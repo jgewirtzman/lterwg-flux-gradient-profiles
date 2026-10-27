@@ -118,6 +118,25 @@ for (f in parent_functions) {
   })
 }
 
+# Also source the Kljun footprint code from the parent repo's exploratory dir
+# (calc_footprint_FFP and calc_footprint_FFP_climatology). Used by the
+# pair-resolved footprint mechanism-2 test. The parent file has trailing
+# scratch / demo code (starts ~line 1188) that fails to parse and pollutes
+# global state, so we read it as text, truncate at the PLOT divider, and
+# eval the function definitions only.
+kljun_file <- file.path(parent_repo, "exploratory", "fluxfootprint_kljun.R")
+if (file.exists(kljun_file)) {
+  tryCatch({
+    lines <- readLines(kljun_file, warn = FALSE)
+    cut_at <- grep("PLOT", lines)[1]
+    if (is.na(cut_at)) cut_at <- length(lines)
+    src <- paste(lines[seq_len(cut_at - 1)], collapse = "\n")
+    eval(parse(text = src), envir = globalenv())
+  }, error = function(e) {
+    message("  Skipping fluxfootprint_kljun.R: ", e$message)
+  })
+}
+
 # -- Source this project's R/ functions --
 proj_functions <- list.files(file.path(proj_dir, "R"),
                               pattern = "\\.R$", full.names = TRUE)
