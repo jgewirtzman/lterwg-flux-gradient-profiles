@@ -173,11 +173,19 @@ compute_layer_storage_flux <- function(profile_ts, attr_df, met_ts = NULL,
     left_join(height_lookup, by = "TowerPosition")
 
   # rho_mol per 30-min window (mol/m³)
+  #
+  # This must be rounded to the same 30-min grid as dcdt_30. Using the raw
+  # timeMid here made the join below succeed only when a met timestamp landed
+  # exactly on a 30-min boundary — a few rows per site — so rho_mol came back
+  # NA almost everywhere and storage_flux with it. The result was that S_net
+  # silently equalled dF (storage contributed nothing) across the whole project.
   if (!is.null(met_ts) && "rhoa_kgm3" %in% names(met_ts)) {
     rho_30 <- met_ts %>%
-      mutate(time_round = timeMid,
+      mutate(time_round = round_date(timeMid, "30 minutes"),
              rho_mol    = rhoa_kgm3 / 0.028964) %>%
-      select(time_round, rho_mol)
+      filter(is.finite(rho_mol)) %>%
+      group_by(time_round) %>%
+      summarise(rho_mol = mean(rho_mol, na.rm = TRUE), .groups = "drop")
   } else {
     rho_30 <- tibble(time_round = unique(dcdt_30$time_round), rho_mol = 42.3)
   }
@@ -197,6 +205,9 @@ compute_layer_storage_flux <- function(profile_ts, attr_df, met_ts = NULL,
 
     layers[[i]] <- inner_join(lo, hi, by = "time_round") %>%
       left_join(rho_30, by = "time_round") %>%
+      # Fall back to a standard molar density rather than dropping the whole
+      # storage term when met is missing for a window.
+      mutate(rho_mol = ifelse(is.finite(rho_mol), rho_mol, 42.3)) %>%
       mutate(
         pos_lower    = pos_lo,
         pos_upper    = pos_hi,
