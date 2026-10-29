@@ -109,34 +109,6 @@ library(scales)
 library(patchwork)
 if (requireNamespace("ggrepel", quietly = TRUE)) library(ggrepel)
 
-# -- Source parent repo functions (safely -- some may have missing dependencies) --
-parent_functions <- list.files(file.path(parent_repo, "functions"),
-                               pattern = "\\.R$", full.names = TRUE)
-for (f in parent_functions) {
-  tryCatch(source(f), error = function(e) {
-    message("  Skipping parent function (missing dependency): ", basename(f))
-  })
-}
-
-# Also source the Kljun footprint code from the parent repo's exploratory dir
-# (calc_footprint_FFP and calc_footprint_FFP_climatology). Used by the
-# pair-resolved footprint mechanism-2 test. The parent file has trailing
-# scratch / demo code (starts ~line 1188) that fails to parse and pollutes
-# global state, so we read it as text, truncate at the PLOT divider, and
-# eval the function definitions only.
-kljun_file <- file.path(parent_repo, "exploratory", "fluxfootprint_kljun.R")
-if (file.exists(kljun_file)) {
-  tryCatch({
-    lines <- readLines(kljun_file, warn = FALSE)
-    cut_at <- grep("PLOT", lines)[1]
-    if (is.na(cut_at)) cut_at <- length(lines)
-    src <- paste(lines[seq_len(cut_at - 1)], collapse = "\n")
-    eval(parse(text = src), envir = globalenv())
-  }, error = function(e) {
-    message("  Skipping fluxfootprint_kljun.R: ", e$message)
-  })
-}
-
 # -- Source this project's R/ functions --
 proj_functions <- list.files(file.path(proj_dir, "R"),
                               pattern = "\\.R$", full.names = TRUE)
@@ -146,3 +118,9 @@ invisible(lapply(proj_functions, source))
 plot_functions <- list.files(file.path(proj_dir, "plots"),
                               pattern = "\\.R$", full.names = TRUE)
 invisible(lapply(plot_functions, source))
+
+# -- Load the Kljun (2015) footprint model --
+# Nothing else is taken from the parent repo. This project used to source every
+# file in its functions/ directory -- 54 functions, none of which are called
+# here -- which only added package loads and name-collision risk.
+load_kljun(parent_repo)
