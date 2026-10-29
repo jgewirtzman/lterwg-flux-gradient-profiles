@@ -38,7 +38,7 @@ plot_profile_anomaly <- function(profile_ts, attr_df, gas = "CH4",
       add_tod_par("PAR") %>%
       select(-time_round, -PAR)
   } else {
-    df <- df %>% add_tod("timeMid")
+    df <- df %>% add_tod("timeMid", lon = attr_longitude(attr_df))
   }
 
   # Mean concentration per height per condition

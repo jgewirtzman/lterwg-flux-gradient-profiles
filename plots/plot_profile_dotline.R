@@ -29,7 +29,7 @@ plot_profile_dotline <- function(profile_ts, attr_df, gas = "CH4",
   df <- profile_ts %>%
     inner_join(height_lookup, by = "TowerPosition") %>%
     add_season("timeMid") %>%
-    add_tod("timeMid")
+    add_tod("timeMid", lon = attr_longitude(attr_df))
 
   # Mean + SE per height per condition
   summary <- df %>%

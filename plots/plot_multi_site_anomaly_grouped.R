@@ -42,7 +42,7 @@ plot_multi_site_anomaly_grouped <- function(all_profiles, all_met, all_data,
         add_tod_par("PAR") %>%
         select(-time_round, -PAR)
     } else {
-      df <- df %>% add_tod("timeMid")
+      df <- df %>% add_tod("timeMid", lon = attr_longitude(attr))
     }
 
     # Compute anomaly per season x tod
@@ -155,7 +155,7 @@ plot_multi_site_anomaly_grouped_grid <- function(all_profiles, all_met, all_data
         add_tod_par("PAR") %>%
         select(-time_round, -PAR)
     } else {
-      df <- df %>% add_tod("timeMid")
+      df <- df %>% add_tod("timeMid", lon = attr_longitude(attr))
     }
 
     height_stats <- df %>%

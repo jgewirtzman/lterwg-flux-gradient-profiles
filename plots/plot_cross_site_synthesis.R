@@ -24,6 +24,9 @@ CANOPY_COLORS <- c(
 #'
 #' @param layer_fluxes_all Named list (by site)
 #' @param filter_jja_night Logical. If TRUE, keep only JJA Night timestamps.
+# Day/night in this file is the core night, 22:00-06:00 LOCAL SOLAR time.
+# These splits previously used the UTC hour, so roughly half of "night"
+# was daylight (up to 96% at PUUM); every JJA_Night figure was affected.
 #' @return Tibble with columns site, z, F_med, F_q25, F_q75, n
 aggregate_flux_profiles <- function(layer_fluxes_all, filter_jja_night = TRUE) {
   rows <- list()
@@ -32,7 +35,7 @@ aggregate_flux_profiles <- function(layer_fluxes_all, filter_jja_night = TRUE) {
     if (is.null(lf) || nrow(lf) == 0) next
     if (filter_jja_night) {
       lf <- lf %>%
-        mutate(month = month(time_round), hour = hour(time_round),
+        mutate(month = month(time_round), hour = local_hour(time_round, site_longitude(.env$site)),
                season = case_when(month %in% 6:8 ~ "JJA",
                                   month %in% 3:5 ~ "MAM",
                                   month %in% 9:11 ~ "SON",
@@ -79,7 +82,7 @@ plot_flux_profile_by_class <- function(layer_fluxes_all, canopy_metrics,
     if (length(ch) == 0 || is.na(ch) || ch < 0.1) ch <- 1  # fallback for open sites
 
     lf <- lf %>%
-      mutate(month = month(time_round), hour = hour(time_round),
+      mutate(month = month(time_round), hour = local_hour(time_round, site_longitude(.env$site)),
              season = case_when(month %in% 6:8 ~ "JJA",
                                 month %in% 3:5 ~ "MAM",
                                 month %in% 9:11 ~ "SON",
@@ -168,7 +171,7 @@ plot_flux_ranked_bars <- function(layer_fluxes_all, canopy_metrics,
     lf <- layer_fluxes_all[[site]]
     if (is.null(lf) || nrow(lf) == 0) next
     lf <- lf %>%
-      mutate(month = month(time_round), hour = hour(time_round),
+      mutate(month = month(time_round), hour = local_hour(time_round, site_longitude(.env$site)),
              season = case_when(month %in% 6:8 ~ "JJA",
                                 month %in% 3:5 ~ "MAM",
                                 month %in% 9:11 ~ "SON",
@@ -264,7 +267,7 @@ plot_flux_profile_exemplar <- function(layer_fluxes_all, canopy_metrics,
     lf <- layer_fluxes_all[[site]]
     if (is.null(lf) || nrow(lf) == 0) next
     lf <- lf %>%
-      mutate(month = month(time_round), hour = hour(time_round),
+      mutate(month = month(time_round), hour = local_hour(time_round, site_longitude(.env$site)),
              season = case_when(month %in% 6:8 ~ "JJA",
                                 month %in% 3:5 ~ "MAM",
                                 month %in% 9:11 ~ "SON",
@@ -440,7 +443,7 @@ plot_flux_ground_vs_ecosystem <- function(layer_fluxes_all, canopy_metrics,
     if (is.null(lf) || nrow(lf) == 0) next
     if (filter_jja_night) {
       lf <- lf %>%
-        mutate(month = month(time_round), hour = hour(time_round),
+        mutate(month = month(time_round), hour = local_hour(time_round, site_longitude(.env$site)),
                season = case_when(month %in% 6:8 ~ "JJA",
                                   month %in% 3:5 ~ "MAM",
                                   month %in% 9:11 ~ "SON",

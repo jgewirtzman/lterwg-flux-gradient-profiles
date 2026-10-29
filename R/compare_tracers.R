@@ -88,8 +88,8 @@ compare_tracer_profiles <- function(profile_ts_ch4, profile_ts_co2, attr_df) {
       norm_gradient_CH4, norm_gradient_CO2
     ) %>%
     add_season("timeMid") %>%
-    add_tod("timeMid") %>%
-    mutate(hour = hour(timeMid))
+    add_tod("timeMid", lon = attr_longitude(attr_df)) %>%
+    mutate(hour = local_hour(timeMid, attr_longitude(attr_df)))
 }
 
 

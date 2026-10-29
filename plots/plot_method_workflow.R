@@ -64,6 +64,8 @@ plot_method_workflow <- function(site, gas,
                                    tod = c("Night", "Day"),
                                    source_sink_df = NULL) {
   tod <- match.arg(tod)
+  # Timestamps are UTC; day/night and diel hour use local solar time.
+  lon_site <- site_longitude(site)
 
   requireNamespace("patchwork", quietly = TRUE)
 
@@ -84,11 +86,11 @@ plot_method_workflow <- function(site, gas,
   # ---- Apply season/diel filters to the observational panels ----
   if (filter_jja_night) {
     sel_tod <- tod   # avoid shadowing below
-    prof <- prof %>% add_season("timeMid") %>% add_tod("timeMid") %>%
+    prof <- prof %>% add_season("timeMid") %>% add_tod("timeMid", lon = lon_site) %>%
       filter(season == "JJA", as.character(tod) == sel_tod)
     flux <- flux %>%
       mutate(month  = lubridate::month(time_round),
-             hour   = lubridate::hour(time_round),
+             hour   = local_hour(time_round, lon_site),
              season = case_when(month %in% 6:8 ~ "JJA",
                                 month %in% 3:5 ~ "MAM",
                                 month %in% 9:11 ~ "SON",
@@ -252,7 +254,7 @@ plot_method_workflow <- function(site, gas,
     w <- winds
     if (filter_jja_night && "timeMid" %in% names(w)) {
       sel_tod <- tod
-      w <- w %>% add_season("timeMid") %>% add_tod("timeMid") %>%
+      w <- w %>% add_season("timeMid") %>% add_tod("timeMid", lon = lon_site) %>%
         filter(season == "JJA", as.character(tod) == sel_tod)
     }
     wind_stats <- w %>%
@@ -364,7 +366,7 @@ plot_method_workflow <- function(site, gas,
     if (filter_jja_night) {
       ss_filt <- ss_filt %>%
         mutate(.mon  = lubridate::month(time_round),
-               .hour = lubridate::hour(time_round)) %>%
+               .hour = local_hour(time_round, lon_site)) %>%
         filter(.mon %in% 6:8,
                if (tod == "Night") (.hour < 6 | .hour >= 18) else (.hour >= 6 & .hour < 18))
     }

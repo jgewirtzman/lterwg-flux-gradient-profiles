@@ -32,14 +32,43 @@ add_season <- function(df, time_col = "timeMid") {
     mutate(season = factor(season, levels = c("DJF", "MAM", "JJA", "SON")))
 }
 
-#' Add time-of-day column (Day/Night) using fixed hours (fallback)
-add_tod <- function(df, time_col = "timeMid", day_start = 6, day_end = 18) {
+#' Resolve a longitude for add_tod(): explicit lon, else site code(s), else a
+#' `site` column in the data. Stops rather than guessing, because the old
+#' behaviour -- silently using the UTC hour -- is what put about half of all
+#' "night" records in daylight (up to 96% at PUUM).
+resolve_tod_longitude <- function(df, lon = NULL, site = NULL) {
+  if (!is.null(lon)) return(lon)
+  if (!is.null(site)) return(site_longitude(site))
+  if ("site" %in% names(df)) return(site_longitude(df$site))
+  stop("Day/night needs a location: pass `lon`, pass `site`, or include a ",
+       "`site` column. Timestamps here are UTC, so the clock hour alone ",
+       "misclassifies day and night by 4-10 hours.", call. = FALSE)
+}
+
+#' Add time-of-day column (Day/Night) from the local SOLAR hour.
+#'
+#' Day is solar hour in [day_start, day_end). Prefer add_tod_par() wherever
+#' PAR is available: a fixed clock window ignores how day length changes
+#' through the year.
+#'
+#' @param lon Longitude (degrees east), scalar or one per row.
+#' @param site NEON site code(s), used to look up longitude when lon is NULL.
+add_tod <- function(df, time_col = "timeMid", lon = NULL, site = NULL,
+                    day_start = 6, day_end = 18) {
+  lon <- resolve_tod_longitude(df, lon, site)
+  sh <- solar_hour(df[[time_col]], lon)
   df %>%
-    mutate(tod = ifelse(
-      hour(.data[[time_col]]) >= day_start & hour(.data[[time_col]]) < day_end,
-      "Day", "Night"
-    )) %>%
-    mutate(tod = factor(tod, levels = c("Day", "Night")))
+    mutate(tod = factor(ifelse(sh >= day_start & sh < day_end, "Day", "Night"),
+                        levels = c("Day", "Night")))
+}
+
+#' Night defined as the core night window only, [night_start, 24) U [0, night_end)
+#' in local solar time -- by default 22:00-06:00, which leaves out the evening
+#' transition. Note this differs from add_tod(), whose night is 18:00-06:00;
+#' both conventions are in use in this codebase.
+is_core_night <- function(time_utc, lon, night_start = 22, night_end = 6) {
+  sh <- solar_hour(time_utc, lon)
+  sh >= night_start | sh < night_end
 }
 
 #' Add time-of-day column using PAR (radiation-based)

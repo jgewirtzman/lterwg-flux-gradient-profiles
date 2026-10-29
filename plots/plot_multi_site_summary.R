@@ -79,7 +79,7 @@ plot_multi_site_shape_frequency <- function(all_shapes, gas = "CH4") {
   # Compute shape frequencies per site x season
   freq <- combined %>%
     add_season("timeMid") %>%
-    add_tod("timeMid") %>%
+    add_tod("timeMid") %>%   # longitude resolved per row from the site column
     group_by(site, season, tod, profile_shape) %>%
     summarise(n = n(), .groups = "drop") %>%
     group_by(site, season, tod) %>%

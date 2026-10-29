@@ -54,7 +54,7 @@ plot_multi_site_anomaly_with_wind <- function(all_profiles, all_met, all_winds,
         add_tod_par("PAR") %>%
         select(-time_round, -PAR)
     } else {
-      df <- df %>% add_tod("timeMid")
+      df <- df %>% add_tod("timeMid", lon = attr_longitude(attr))
     }
 
     anomaly_df <- df %>%
@@ -87,7 +87,7 @@ plot_multi_site_anomaly_with_wind <- function(all_profiles, all_met, all_winds,
           add_tod_par("PAR") %>%
           select(-time_round, -PAR)
       } else {
-        tmp <- tmp %>% add_tod("timeMid")
+        tmp <- tmp %>% add_tod("timeMid", lon = attr_longitude(attr))
       }
       tmp %>%
         filter(season == "JJA", tod == "Night") %>%

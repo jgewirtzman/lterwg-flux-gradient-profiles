@@ -21,7 +21,7 @@ plot_flux_vertical_profile <- function(layer_fluxes_all, canopy_metrics,
     lf <- lf %>%
       rename(timeMid = time_round) %>%
       add_season("timeMid") %>%
-      add_tod("timeMid")
+      add_tod("timeMid", site = site)
 
     if (!is.null(condition) && condition == "JJA_Night") {
       lf <- lf %>% filter(season == "JJA", tod == "Night")
@@ -114,7 +114,7 @@ plot_layer_source_sink <- function(layer_fluxes_all, canopy_metrics,
       ss <- ss %>%
         rename(timeMid = time_round) %>%
         add_season("timeMid") %>%
-        add_tod("timeMid")
+        add_tod("timeMid", site = site)
       if (!is.null(condition) && condition == "JJA_Night") {
         ss <- ss %>% filter(season == "JJA", tod == "Night")
       }
@@ -135,7 +135,7 @@ plot_layer_source_sink <- function(layer_fluxes_all, canopy_metrics,
       lf <- lf %>%
         rename(timeMid = time_round) %>%
         add_season("timeMid") %>%
-        add_tod("timeMid")
+        add_tod("timeMid", site = site)
       if (!is.null(condition) && condition == "JJA_Night") {
         lf <- lf %>% filter(season == "JJA", tod == "Night")
       }

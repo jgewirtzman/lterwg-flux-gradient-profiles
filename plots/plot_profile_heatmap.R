@@ -21,7 +21,7 @@ plot_profile_heatmap <- function(profile_ts, attr_df, gas = "CH4",
   df <- profile_ts %>%
     inner_join(height_lookup, by = "TowerPosition") %>%
     add_season("timeMid") %>%
-    mutate(hour = hour(timeMid))
+    mutate(hour = local_hour(timeMid, attr_longitude(attr_df)))
 
   if (!is.null(months)) {
     df <- df %>% filter(month(timeMid) %in% months)

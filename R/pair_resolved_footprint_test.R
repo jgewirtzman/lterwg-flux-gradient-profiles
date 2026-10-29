@@ -62,10 +62,12 @@ filter_pair_metrics <- function(pair_df, adjacent_only = TRUE,
   out <- out %>% filter(abs(dArea) > min_dArea)
 
   if (jja_night_only) {
+    # Night here is 22:00-05:00 local solar time, as originally intended; the
+    # filter previously compared the UTC hour, which is 4-10 hours off.
     out <- out %>%
-      mutate(month = lubridate::month(timeMid),
-             hour  = lubridate::hour(timeMid)) %>%
-      filter(month %in% c(6, 7, 8), hour >= 22 | hour < 5)
+      filter(lubridate::month(timeMid) %in% c(6, 7, 8),
+             is_core_night(timeMid, site_longitude(site),
+                           night_start = 22, night_end = 5))
   }
 
   out

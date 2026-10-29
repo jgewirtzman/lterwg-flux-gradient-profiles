@@ -91,13 +91,13 @@ prepare_profile_wide <- function(profile_ts, attr_df) {
   # Add temporal columns
   df_wide <- df_wide %>%
     mutate(
-      hour = hour(timeMid),
+      hour = local_hour(timeMid, attr_longitude(attr_df)),
       month = month(timeMid),
       year = year(timeMid),
       doy = yday(timeMid)
     ) %>%
     add_season("timeMid") %>%
-    add_tod("timeMid")
+    add_tod("timeMid", lon = attr_longitude(attr_df))
 
   df_wide
 }
@@ -129,7 +129,8 @@ get_height_lookup <- function(attr_df) {
 #' @param profile_ts Tibble. Output of prepare_profile_timeseries()
 #' @param met_ts Tibble. Output of extract_met_timeseries()
 #' @return profile_ts with added columns: PAR, zoL, ustar, stability, tod (PAR-based)
-join_met_to_profiles <- function(profile_ts, met_ts) {
+#' @param lon Tower longitude; needed only when met_ts has no PAR column.
+join_met_to_profiles <- function(profile_ts, met_ts, lon = NULL) {
 
   if (is.null(met_ts) || nrow(met_ts) == 0) return(profile_ts)
 
@@ -141,7 +142,7 @@ join_met_to_profiles <- function(profile_ts, met_ts) {
     ) %>%
     select(-time_round) %>%
     # Add PAR-based day/night if PAR is available
-    {if ("PAR" %in% names(.)) add_tod_par(., "PAR") else add_tod(., "timeMid")}
+    {if ("PAR" %in% names(.)) add_tod_par(., "PAR") else add_tod(., "timeMid", lon = lon)}
 }
 
 

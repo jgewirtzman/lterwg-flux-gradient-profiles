@@ -73,8 +73,8 @@ summarize_storage_flux_diel <- function(storage_flux, attr_df) {
     filter(!gap_flag) %>%
     # Add temporal context
     add_season("timeMid") %>%
-    add_tod("timeMid") %>%
-    mutate(hour = hour(timeMid)) %>%
+    add_tod("timeMid", lon = attr_longitude(attr_df)) %>%
+    mutate(hour = local_hour(timeMid, attr_longitude(attr_df))) %>%
     # Join heights
     left_join(height_lookup, by = "TowerPosition") %>%
     # Aggregate

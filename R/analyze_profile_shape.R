@@ -131,8 +131,8 @@ calc_profile_metrics <- function(profile_ts, attr_df, gas = "CH4") {
   # Add temporal context
   df %>%
     add_season("timeMid") %>%
-    add_tod("timeMid") %>%
-    mutate(hour = hour(timeMid))
+    add_tod("timeMid", lon = attr_longitude(attr_df)) %>%
+    mutate(hour = local_hour(timeMid, attr_longitude(attr_df)))
 }
 
 
@@ -140,11 +140,12 @@ calc_profile_metrics <- function(profile_ts, attr_df, gas = "CH4") {
 #'
 #' @param profile_shapes Tibble. Output of classify_profile_shape()
 #' @return Tibble with shape frequency by season x TOD
-summarize_profile_shapes <- function(profile_shapes) {
+#' @param lon Tower longitude, for the local time of day.
+summarize_profile_shapes <- function(profile_shapes, lon) {
 
   profile_shapes %>%
     add_season("timeMid") %>%
-    add_tod("timeMid") %>%
+    add_tod("timeMid", lon = lon) %>%
     group_by(season, tod, profile_shape) %>%
     summarise(n = n(), .groups = "drop") %>%
     group_by(season, tod) %>%
