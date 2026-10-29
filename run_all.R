@@ -30,7 +30,10 @@ source("config.R")
 
 # Sites to process
 sites_to_process <- all_sites
-# sites_to_process <- forest_sites
+# Tall-canopy sites only, using measured canopy height at the tower rather
+# than a hand-coded list (requires output/tables/canopy_metrics.csv):
+# sites_to_process <- with(read.csv(file.path(tab_dir, "canopy_metrics.csv")),
+#                          site[canopy_height >= 5])
 # sites_to_process <- c("HARV")         # single site for debugging
 
 # Gases to analyze

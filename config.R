@@ -11,96 +11,6 @@ tab_dir     <- file.path(proj_dir, "output", "tables")
 # -- Google Drive --
 gdrive_folder_id <- "1Q99CT77DnqMl2mrUtuikcY47BFpckKw3"
 
-# -- Site list (all NEON sites with flux-gradient data) --
-all_sites <- c(
-  "ABBY", "BARR", "BART", "BLAN", "BONA", "CLBJ", "CPER", "DCFS",
-  "DEJU", "DELA", "DSNY", "GRSM", "GUAN", "HARV", "HEAL", "JERC",
-  "JORN", "KONA", "KONZ", "LAJA", "LENO", "MLBS", "MOAB", "NIWO",
-  "NOGP", "OAES", "ONAQ", "ORNL", "OSBS", "PUUM", "RMNP", "SCBI",
-  "SERC", "SJER", "SOAP", "SRER", "STEI", "STER", "TALL", "TEAK",
-  "TOOL", "TREE", "UKFS", "UNDE", "WOOD", "WREF", "YELL"
-)
-
-# -- Forested NEON sites (tall canopy ecosystems where within-canopy
-#    profile structure is scientifically interesting) --
-forest_sites <- c(
-  # Eastern deciduous / mixed
-  "HARV", "BART", "SCBI", "SERC", "GRSM", "MLBS", "ORNL",
-  "BLAN", "STEI", "TREE", "UKFS", "UNDE",
-  # Southeast pine / bottomland
-  "DELA", "LENO", "TALL", "OSBS", "JERC",
-  # Western evergreen
-  "WREF", "ABBY", "SOAP", "TEAK", "SJER",
-  # Subalpine / montane
-  "NIWO", "RMNP", "YELL",
-  # Boreal
-  "BONA", "DEJU", "HEAL",
-  # Tropical
-  "GUAN", "LAJA", "PUUM"
-)
-
-# -- Ecosystem type assignments for all NEON terrestrial sites --
-# Source: NEON site characteristics, NLCD dominant land cover
-ecosystem_types <- c(
-  # FOREST - Eastern deciduous / mixed
-  HARV = "Forest - Eastern Deciduous",
-  BART = "Forest - Eastern Deciduous",
-  SCBI = "Forest - Eastern Deciduous",
-  SERC = "Forest - Eastern Deciduous",
-  GRSM = "Forest - Eastern Deciduous",
-  MLBS = "Forest - Eastern Deciduous",
-  ORNL = "Forest - Eastern Deciduous",
-  BLAN = "Forest - Eastern Deciduous",
-  STEI = "Forest - Eastern Deciduous",
-  TREE = "Forest - Eastern Deciduous",
-  UKFS = "Forest - Eastern Deciduous",
-  UNDE = "Forest - Eastern Deciduous",
-  # FOREST - Southeast pine / bottomland
-  DELA = "Forest - SE Pine/Bottomland",
-  LENO = "Forest - SE Pine/Bottomland",
-  TALL = "Forest - SE Pine/Bottomland",
-  OSBS = "Forest - SE Pine/Bottomland",
-  JERC = "Forest - SE Pine/Bottomland",
-  # FOREST - Western evergreen
-  WREF = "Forest - Western Evergreen",
-  ABBY = "Forest - Western Evergreen",
-  SOAP = "Forest - Western Evergreen",
-  TEAK = "Forest - Western Evergreen",
-  SJER = "Forest - Western Evergreen",
-  # FOREST - Subalpine / montane
-  NIWO = "Forest - Subalpine/Montane",
-  RMNP = "Forest - Subalpine/Montane",
-  YELL = "Forest - Subalpine/Montane",
-  # FOREST - Boreal
-  BONA = "Forest - Boreal",
-  DEJU = "Forest - Boreal",
-  HEAL = "Forest - Boreal",
-  # FOREST - Tropical
-  GUAN = "Forest - Tropical",
-  LAJA = "Forest - Tropical",
-  PUUM = "Forest - Tropical",
-  # GRASSLAND - Prairie
-  CPER = "Grassland",
-  KONZ = "Grassland",
-  KONA = "Grassland",
-  NOGP = "Grassland",
-  DCFS = "Grassland",
-  WOOD = "Grassland",
-  STER = "Grassland",
-  DSNY = "Grassland",
-  OAES = "Grassland",
-  # SHRUBLAND / DESERT
-  SRER = "Shrubland/Desert",
-  JORN = "Shrubland/Desert",
-  MOAB = "Shrubland/Desert",
-  ONAQ = "Shrubland/Desert",
-  # TUNDRA
-  BARR = "Tundra",
-  TOOL = "Tundra",
-  # WOODLAND / SAVANNA
-  CLBJ = "Woodland/Savanna"
-)
-
 # -- Packages --
 library(tidyverse)
 library(lubridate)
@@ -124,3 +34,15 @@ invisible(lapply(plot_functions, source))
 # file in its functions/ directory -- 54 functions, none of which are called
 # here -- which only added package loads and name-collision risk.
 load_kljun(parent_repo)
+
+# -- Site metadata and site lists --
+# Derived from the AmeriFlux/NEON table the methane workflow uses, so site
+# classes match the methane paper. This replaces hand-coded all_sites,
+# forest_sites and ecosystem_types lists; the latter cited NLCD but matched
+# neither NLCD nor the measured canopy (see R/site_metadata.R).
+SITE_METADATA <- load_site_metadata(parent_repo)
+all_sites <- SITE_METADATA$site
+
+# Grouping used for the by-ecotype figures: IGBP class, as in the methane paper.
+ecosystem_types <- setNames(paste0(SITE_METADATA$igbp, " - ", SITE_METADATA$igbp_label),
+                            SITE_METADATA$site)
