@@ -41,7 +41,7 @@ for (fp in files) {
   d <- readRDS(fp)
   site <- d$site[1]
   if (!"time_round" %in% names(d)) {
-    message(site, ": checkpoint predates time_round — re-run compute_directional_fwet.R")
+    message(site, ": checkpoint predates time_round — re-run analysis/footprint/compute_directional_fwet.R")
     next
   }
   sd_ <- tryCatch(load_all_sites(site, data_dir), error = function(e) NULL)

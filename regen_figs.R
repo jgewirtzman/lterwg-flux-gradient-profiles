@@ -2,9 +2,7 @@ suppressPackageStartupMessages({
   library(dplyr); library(lubridate); library(ggplot2); library(patchwork)
 })
 
-source("config.R")
-for (f in list.files("R", pattern="[.]R$", full.names=TRUE)) source(f)
-for (f in list.files("plots", pattern="[.]R$", full.names=TRUE)) source(f)
+source("config.R")   # also sources R/ and plots/
 
 ckpt_dir <- "output/checkpoints"
 fig_dir  <- "output/figures"
