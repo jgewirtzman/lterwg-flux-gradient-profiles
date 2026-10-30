@@ -65,12 +65,16 @@ nwi_buffer_m <- if (exists("nwi_buffer_m")) nwi_buffer_m else 5000
 # STEP 1: DOWNLOAD DATA
 # ============================================================================
 
+# The shared Drive folder holds only the original Aug 2021 - Jun 2024 data.
+# Version 3 and the Jul 2024 - Aug 2026 extension are not on Drive (Google
+# export is disabled in WorkFlow_rerun_2021_2026_v3.R); point DATA_DIRS at
+# those folders instead of downloading.
 if (do_download) {
   message("=== Downloading data from Google Drive ===")
   download_all_sites(
     sites = sites_to_process,
     gdrive_folder_id = gdrive_folder_id,
-    local_dir = data_dir,
+    local_dir = data_dir[1],   # downloads go to one place, even if DATA_DIRS lists several
     file_types = c("9min", "aligned_conc_flux_9min", "attr"),
     overwrite = FALSE
   )

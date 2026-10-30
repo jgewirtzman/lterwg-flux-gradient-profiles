@@ -2,11 +2,37 @@
 # Central configuration for height-resolved concentration profile analysis
 
 # -- Paths --
-proj_dir    <- "/Users/jongewirtzman/My Drive/Research/Flux Gradient/height-conc-analysis"
-parent_repo <- "/Users/jongewirtzman/My Drive/Research/Flux Gradient/lterwg-flux-gradient"
-data_dir    <- file.path(proj_dir, "data")
-fig_dir     <- file.path(proj_dir, "output", "figures")
-tab_dir     <- file.path(proj_dir, "output", "tables")
+# Every path can be overridden with an environment variable, following the
+# convention in the LTER flux-gradient repos (Sys.getenv("LOCALDIR_...")).
+# Scripts source this file from the project root, so that is the default.
+#
+#   FLUXPROFILES_DIR   project root (default: the working directory)
+#   FLUXGRADIENT_REPO  lterwg-flux-gradient checkout (default: sibling folder)
+#   DATA_DIRS          data directories, separated by ";". Give several to stack
+#                      consecutive NEON download periods into one record, e.g.
+#                      .../NEON_Aligned_Concentrations;.../NEON_Aligned_Concentrations_202407_202608
+#
+# Keep data outside a Google Drive-synced folder if you can: downloads written
+# into the mounted Drive folder have silently come out as 0-byte files.
+proj_dir <- normalizePath(Sys.getenv("FLUXPROFILES_DIR", unset = getwd()),
+                          mustWork = FALSE)
+if (!file.exists(file.path(proj_dir, "config.R"))) {
+  stop("config.R not found in ", proj_dir, ". Run from the project root or set ",
+       "FLUXPROFILES_DIR.", call. = FALSE)
+}
+parent_repo <- Sys.getenv("FLUXGRADIENT_REPO",
+                          unset = file.path(dirname(proj_dir), "lterwg-flux-gradient"))
+data_dir <- {
+  dd <- Sys.getenv("DATA_DIRS", unset = "")
+  if (nzchar(dd)) trimws(strsplit(dd, ";", fixed = TRUE)[[1]]) else file.path(proj_dir, "data")
+}
+missing_dirs <- data_dir[!dir.exists(data_dir)]
+if (length(missing_dirs)) {
+  warning("Data director", if (length(missing_dirs) > 1) "ies" else "y",
+          " not found: ", paste(missing_dirs, collapse = ", "), call. = FALSE)
+}
+fig_dir <- file.path(proj_dir, "output", "figures")
+tab_dir <- file.path(proj_dir, "output", "tables")
 
 # -- Google Drive --
 gdrive_folder_id <- "1Q99CT77DnqMl2mrUtuikcY47BFpckKw3"

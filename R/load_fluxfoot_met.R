@@ -18,7 +18,9 @@
 
 suppressPackageStartupMessages({ library(dplyr); library(lubridate) })
 
-FLUXFOOT_DIR <- "~/NEON/fluxgrad_min30"
+# Where {SITE}_30min.zip / data/{SITE}/{SITE}_30min.Rdata live. Override with
+# the FLUXFOOT_DIR environment variable.
+FLUXFOOT_DIR <- Sys.getenv("FLUXFOOT_DIR", unset = "~/NEON/fluxgrad_min30")
 
 #' Per-site wind direction and sigma_v on the 30-min grid.
 #'

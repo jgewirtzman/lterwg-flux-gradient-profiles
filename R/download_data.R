@@ -40,12 +40,14 @@ download_site_data <- function(site,
   for (ftype in file_types) {
     zip_name <- paste0(site, "_", ftype, ".zip")
 
-    # Check if already downloaded
-    rdata_candidates <- list.files(site_dir, pattern = ftype, full.names = TRUE)
-    rdata_candidates <- rdata_candidates[grepl("\\.RData$|\\.Rdata$|\\.rdata$", rdata_candidates)]
-    if (length(rdata_candidates) > 0 && !overwrite) {
+    # Check if already downloaded. The match is anchored on the full file
+    # name: a bare pattern "9min" also matched "_aligned_conc_flux_9min", so
+    # with the aligned file present the raw 9-min download was skipped and the
+    # aligned file was recorded as the raw one.
+    existing <- site_file(local_dir, site, paste0("_", ftype))
+    if (!is.na(existing) && !overwrite) {
       message("  Already exists: ", zip_name, " -> skipping")
-      paths[[ftype]] <- rdata_candidates[1]
+      paths[[ftype]] <- existing
       next
     }
 
@@ -60,6 +62,14 @@ download_site_data <- function(site,
     zip_path <- file.path(site_dir, zip_name)
     message("  Downloading: ", zip_name)
     googledrive::drive_download(file = file_row$id, path = zip_path, overwrite = TRUE)
+    # Writing into a Google Drive-synced folder has produced 0-byte files with
+    # no error, which then fail to unzip or load far from the cause.
+    if (!file.exists(zip_path) || file.size(zip_path) == 0) {
+      unlink(zip_path)
+      stop("Download of ", zip_name, " produced an empty file. If ", local_dir,
+           " is inside a Google Drive-synced folder, download elsewhere.",
+           call. = FALSE)
+    }
 
     # Unzip
     if (grepl("\\.zip$", zip_name)) {
@@ -86,11 +96,8 @@ download_site_data <- function(site,
     }
 
     # Record path to extracted file
-    rdata_candidates <- list.files(site_dir, pattern = ftype, full.names = TRUE)
-    rdata_candidates <- rdata_candidates[grepl("\\.RData$|\\.Rdata$|\\.rdata$", rdata_candidates)]
-    if (length(rdata_candidates) > 0) {
-      paths[[ftype]] <- rdata_candidates[1]
-    }
+    extracted <- site_file(local_dir, site, paste0("_", ftype))
+    if (!is.na(extracted)) paths[[ftype]] <- extracted
   }
 
   paths
